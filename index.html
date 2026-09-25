@@ -137,6 +137,7 @@
   .home-hero{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:22px;}
   @media (max-width:1000px){.home-hero{grid-template-columns:1fr 1fr;}}
   @media (max-width:560px){.home-hero{grid-template-columns:1fr;}}
+  .home-split{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start;}
   .home-greet{background:var(--ink);color:#fff;border-radius:18px;padding:26px;display:flex;flex-direction:column;justify-content:center;gap:12px;}
   .home-greet h2{font-size:21px;font-weight:800;}
   .home-greet p{color:#c9d3ce;font-size:13px;line-height:1.5;}
@@ -147,6 +148,12 @@
   .home-quick .qbar span{display:block;height:100%;border-radius:4px;}
 
   .pend-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s;}
+  .cobranca-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  .cobranca-row:last-child{border-bottom:none;}
+  .cobranca-row.cobranca-hoje{background:var(--danger-lt);}
+  .cobranca-info{flex:1;min-width:160px;display:flex;flex-direction:column;gap:2px;}
+  .cobranca-info b{font-size:13.5px;font-weight:700;}
+  .cobranca-info span{font-size:11.5px;color:var(--muted);}
   .pend-row:hover{background:#fafcfb;}
   .pend-row:last-child{border-bottom:none;}
   .pend-icon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -315,6 +322,22 @@
     .menu-btn{width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;}
     .sidebar-scrim.open{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:70;}
     th:nth-child(n+4),td:nth-child(n+4){display:none;}
+
+    .home-hero{grid-template-columns:1fr 1fr 1fr;gap:8px;}
+    .home-greet{grid-column:1/-1;padding:16px;}
+    .home-greet h2{font-size:16px;}
+    .home-greet p{font-size:12px;}
+    .home-quick{padding:10px;border-radius:12px;}
+    .home-quick svg{width:14px!important;height:14px!important;}
+    .home-quick .qnum{font-size:17px;margin-top:5px;}
+    .home-quick .qlabel{font-size:9px;margin-top:2px;line-height:1.2;}
+    .home-quick .qbar{margin-top:7px;height:3px;}
+
+    .home-split{grid-template-columns:1fr;}
+    .home-split .mini-cal-grid{gap:4px;}
+    .home-split .mc-day{font-size:15px;padding:11px 0;border-radius:9px;}
+    .home-split .mc-dow{font-size:11.5px;padding-bottom:9px;}
+    .home-split .card{padding:18px;}
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -471,9 +494,11 @@
       <div class="field"><label>Nome</label><input id="cName" required></div>
       <div class="field-row">
         <div class="field"><label>Valor mensal (₲)</label><input id="cValue" type="number" step="1" min="0"></div>
-        <div class="field"><label>Status</label>
-          <select id="cStatus"><option value="ativo">Ativo</option><option value="pausado">Pausado</option><option value="encerrado">Encerrado</option></select>
-        </div>
+        <div class="field"><label>Dia de cobrança</label><input id="cBillingDay" type="number" min="1" max="31" placeholder="Ex: 5"></div>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <select id="cStatus"><option value="ativo">Ativo</option><option value="pausado">Pausado</option><option value="encerrado">Encerrado</option></select>
       </div>
       <div class="field"><label>Pasta do cliente no Google Drive</label><input id="cDrive" type="url" placeholder="https://drive.google.com/..."></div>
       <div class="field"><label>Serviços</label>
@@ -754,7 +779,7 @@ async function renderLogin(){
       const err = document.getElementById('loginError');
       if(!person){ return; }
       const { error: signErr } = await sb.auth.signInWithPassword({ email: person.email, password: pass });
-      if(signErr){ err.textContent='Senha incorreta.'; err.style.display='block'; return; }
+      if(signErr){ err.textContent = signErr.message==='Invalid login credentials' ? 'Senha incorreta.' : signErr.message; err.style.display='block'; return; }
       err.style.display='none';
       await loadSessionAndStart();
     };
@@ -944,7 +969,7 @@ function renderHome(){
   const postsThisWeek = S.socialPosts.filter(p=>p.date >= weekAgoStr && p.date <= todayISO());
   const postsDoneThisWeek = postsThisWeek.filter(p=>p.status==='feito').length;
   const pendingVideos = S.videoTasks.filter(t=>t.status!=='entregue').length;
-  const activeClients = S.clients.filter(c=>c.status==='ativo').length;
+  const activeLaunches = S.launches.filter(l=>l.status==='andamento').length;
   const videosDelivered = S.videoTasks.filter(t=>t.status==='entregue').length;
   const videosInProgress = S.videoTasks.filter(t=>t.status==='gravado'||t.status==='editado').length;
 
@@ -975,8 +1000,8 @@ function renderHome(){
         <div class="qbar"><span style="width:${(videosDelivered+pendingVideos)? Math.round(videosDelivered/(videosDelivered+pendingVideos)*100):0}%;background:#b8791f;"></span></div>
       </div>
       <div class="home-quick" style="background:#eef2b0;">
-        <svg class="icon" style="width:20px;height:20px;color:#6b7500;"><use href="#ic-users"/></svg>
-        <div><div class="qnum">${activeClients}</div><div class="qlabel">Clientes ativos</div></div>
+        <svg class="icon" style="width:20px;height:20px;color:#6b7500;"><use href="#ic-rocket"/></svg>
+        <div><div class="qnum">${activeLaunches}</div><div class="qlabel">Lançamentos ativos</div></div>
         <div class="qbar"><span style="width:100%;background:#6b7500;"></span></div>
       </div>
     </div>
@@ -990,7 +1015,7 @@ function renderHome(){
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start;">
+    <div class="home-split">
       <div>
         <div class="section-title" style="margin-top:0;">Minhas pendências</div>
         <div class="card" style="padding:4px 0;">
@@ -1075,7 +1100,6 @@ function renderClients(){
         ${statusBadge}
       </div>
       <div class="client-tags">${tags}</div>
-      <div class="client-value">${fmtMoney(c.monthlyValue)}<span style="font-size:11px;color:var(--muted);font-weight:500;"> /mês</span></div>
       <div class="client-actions">
         ${c.driveFolder ? `<a href="${escapeHtml(c.driveFolder)}" target="_blank" class="drivebtn"><svg class="icon" style="width:13px;height:13px;"><use href="#ic-folder"/></svg>Drive</a>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="editClient('${c.id}')"><svg class="icon"><use href="#ic-edit"/></svg>Editar</button>
@@ -1106,6 +1130,7 @@ window.editClient = function(id){
   document.getElementById('clientId').value = c.id;
   document.getElementById('cName').value = c.name||'';
   document.getElementById('cValue').value = c.monthlyValue||'';
+  document.getElementById('cBillingDay').value = c.billingDay||'';
   document.getElementById('cStatus').value = c.status||'ativo';
   document.getElementById('cDrive').value = c.driveFolder||'';
   document.querySelectorAll('#clientForm .checkchip input').forEach(chk=>{ chk.checked = (c.services||[]).includes(chk.value); });
@@ -1124,6 +1149,7 @@ document.getElementById('clientForm').addEventListener('submit', async e=>{
   const data = {
     name: document.getElementById('cName').value.trim(),
     monthlyValue: parseFloat(document.getElementById('cValue').value)||0,
+    billingDay: parseInt(document.getElementById('cBillingDay').value)||null,
     status: document.getElementById('cStatus').value,
     driveFolder: document.getElementById('cDrive').value.trim(),
     services, color: document.getElementById('cColor').value,
@@ -1187,9 +1213,12 @@ window.deletePost = async function(id){
   await db.collection('social_posts').doc(id).delete();
   closeModal('modalDay');
 };
-window.togglePostStatus = async function(id){
+window.togglePostStatus = async function(id, iso){
   const p = S.socialPosts.find(x=>x.id===id); if(!p) return;
-  await db.collection('social_posts').doc(id).update({status: p.status==='feito' ? 'pendente' : 'feito'});
+  const newStatus = p.status==='feito' ? 'pendente' : 'feito';
+  p.status = newStatus;
+  if(iso) openDay(iso);
+  await db.collection('social_posts').doc(id).update({status: newStatus});
 };
 document.getElementById('postForm').addEventListener('submit', async e=>{
   e.preventDefault();
@@ -1255,7 +1284,7 @@ window.openDay = function(iso){
       ${vid ? `<div style="font-size:11px;color:var(--teal-dk);font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:4px;"><svg class="icon" style="width:11px;height:11px;"><use href="#ic-film"/></svg>${escapeHtml(vid.title)}</div>` : ''}
       <div class="daypost-caption">${escapeHtml(p.caption||'(sem legenda)')}</div>
       <div class="daypost-meta">
-        <span class="badge ${p.status==='feito'?'badge-ok':'badge-warn'}" style="cursor:pointer;" onclick="togglePostStatus('${p.id}');openDay('${iso}')">
+        <span class="badge ${p.status==='feito'?'badge-ok':'badge-warn'}" style="cursor:pointer;" onclick="togglePostStatus('${p.id}','${iso}')">
           <svg class="icon" style="width:12px;height:12px;"><use href="#ic-check"/></svg>${p.status==='feito'?'Postado':'Pendente'}
         </span>
         ${p.driveLink ? `<a href="${escapeHtml(p.driveLink)}" target="_blank" class="drivebtn"><svg class="icon" style="width:13px;height:13px;"><use href="#ic-link"/></svg>Arquivo</a>` : ''}
@@ -1372,6 +1401,7 @@ function renderFinance(){
   gate.innerHTML = `
     <div class="view-head"><div><h1>Financeiro</h1><p>Visível só pra você</p></div></div>
     <div class="subtabs" id="financeSubtabs">
+      <button data-s="cobrancas">Cobranças</button>
       <button data-s="geral">Visão geral</button>
       <button data-s="entradas">Entradas por cliente</button>
       <button data-s="fixos">Gastos fixos</button>
@@ -1384,11 +1414,88 @@ function renderFinance(){
     b.addEventListener('click', ()=>{ financeSub = b.dataset.s; currentLaunchId=null; renderFinance(); });
   });
   const body = document.getElementById('financeBody');
+  if(financeSub==='cobrancas') renderFinanceCobrancas(body);
   if(financeSub==='geral') renderFinanceGeral(body);
   if(financeSub==='entradas') renderFinanceEntradas(body);
   if(financeSub==='fixos') renderFinanceFixos(body);
   if(financeSub==='lancamentos') renderFinanceLanza(body);
 }
+
+function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function clientPaidThisMonth(clientId){
+  const now = new Date(); const mk = monthKey(now);
+  return S.financeEntries.some(e=>e.clientId===clientId && e.date && monthKey(new Date(e.date+'T00:00:00'))===mk);
+}
+function renderFinanceCobrancas(body){
+  const now = new Date(); const today = now.getDate();
+  const activeClients = S.clients.filter(c=>c.status==='ativo');
+  const totalContratos = activeClients.reduce((a,c)=>a+(Number(c.monthlyValue)||0),0);
+  const totalFixos = S.fixedExpenses.reduce((a,x)=>a+(Number(x.amount)||0),0);
+
+  const billingRows = activeClients
+    .slice()
+    .sort((a,b)=>(a.billingDay||99)-(b.billingDay||99))
+    .map(c=>{
+      const paid = clientPaidThisMonth(c.id);
+      const day = c.billingDay;
+      let stateBadge = '<span class="badge badge-muted">Sem dia definido</span>';
+      let rowClass = '';
+      if(day){
+        if(paid){ stateBadge = '<span class="badge badge-ok">Pago este mes</span>'; }
+        else if(day===today){ stateBadge = '<span class="badge badge-danger">Cobrar hoy</span>'; rowClass='cobranca-hoje'; }
+        else if(day<today){ stateBadge = '<span class="badge badge-danger">Atrasado</span>'; rowClass='cobranca-hoje'; }
+        else{ stateBadge = '<span class="badge badge-warn">Pendente este mes</span>'; }
+      } else if(paid){ stateBadge = '<span class="badge badge-ok">Pago este mes</span>'; }
+      return `<div class="cobranca-row ${rowClass}">
+        <span class="client-dot" style="background:${c.color||'#999'}"></span>
+        <div class="cobranca-info">
+          <b>${escapeHtml(c.name)}</b>
+          <span>${day ? 'Dia '+day : 'Sin dia de cobro definido'} &middot; ${fmtMoney(c.monthlyValue)}</span>
+        </div>
+        ${stateBadge}
+        ${!paid ? `<button class="btn btn-primary btn-sm" onclick="marcarClientePago('${c.id}')">Marcar como pago</button>` : ''}
+      </div>`;
+    }).join('');
+
+  const fixedRows = [...S.fixedExpenses].sort((a,b)=>(a.dayOfMonth||99)-(b.dayOfMonth||99)).map(x=>{
+    const day = x.dayOfMonth;
+    let stateBadge = '<span class="badge badge-muted">Sin dia definido</span>';
+    if(day){
+      if(day===today) stateBadge = '<span class="badge badge-danger">Vence hoy</span>';
+      else if(day<today) stateBadge = '<span class="badge badge-warn">Ya venció</span>';
+      else stateBadge = '<span class="badge badge-muted">Dia '+day+'</span>';
+    }
+    return `<div class="cobranca-row">
+      <span class="client-dot" style="background:#999"></span>
+      <div class="cobranca-info"><b>${escapeHtml(x.name)}</b><span>${escapeHtml(x.category||'Sin categoria')} &middot; ${fmtMoney(x.amount)}</span></div>
+      ${stateBadge}
+    </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="grid grid-3" style="margin-bottom:22px;">
+      <div class="card stat-card"><div class="label">Valor total dos contratos</div><div class="value">${fmtMoney(totalContratos)}</div><div class="sub">${activeClients.length} cliente${activeClients.length===1?'':'s'} ativo${activeClients.length===1?'':'s'}</div></div>
+      <div class="card stat-card"><div class="label">Total gastos fixos por mês</div><div class="value">${fmtMoney(totalFixos)}</div><div class="sub">${S.fixedExpenses.length} item${S.fixedExpenses.length===1?'':'s'}</div></div>
+      <div class="card stat-card"><div class="label">Líquido esperado do mês</div><div class="value">${fmtMoney(totalContratos-totalFixos)}</div><div class="sub">contratos − fixos</div></div>
+    </div>
+    <div class="section-title">Cobranças dos clientes</div>
+    <div class="card" style="padding:4px 0;">
+      ${billingRows || '<div class="empty"><b>Nenhum cliente ativo</b></div>'}
+    </div>
+    <div class="section-title">Custos fixos a pagar</div>
+    <div class="card" style="padding:4px 0;">
+      ${fixedRows || '<div class="empty"><b>Nenhum gasto fixo cadastrado</b></div>'}
+    </div>
+  `;
+}
+window.marcarClientePago = async function(clientId){
+  const c = clientById(clientId); if(!c) return;
+  if(!confirm(`Confirmar que ${c.name} pagou ${fmtMoney(c.monthlyValue)} este mes? Isso vai criar uma entrada no financeiro.`)) return;
+  await db.collection('finance_entries').add({
+    clientId, amount: c.monthlyValue||0, date: todayISO(), category: 'Mensalidade', note: 'Marcado como pago via Cobranças',
+  });
+  if(currentTab==='financeiro' && financeSub==='cobrancas') renderFinance();
+};
 
 function renderFinanceGeral(body){
   const now = new Date(); const year = now.getFullYear(); const curMonth = now.getMonth();
